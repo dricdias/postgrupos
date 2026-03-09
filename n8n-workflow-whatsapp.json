@@ -1,0 +1,326 @@
+{
+  "name": "Disparo em Lote WhatsApp + IA (Intervalos)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "disparo-lote-whatsapp",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body.isAiEnabled }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Usar IA?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "generate",
+        "prompt": "={{ $json.body.aiPrompt }}",
+        "size": "1024x1024",
+        "responseFormat": "b64_json"
+      },
+      "name": "Gerar Imagem (OpenAI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [400, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "create",
+        "prompt": "Crie uma mensagem persuasiva baseada neste pedido: {{ $('Webhook').item.json.body.aiPrompt }}",
+        "model": "gpt-4o"
+      },
+      "name": "Gerar Texto (OpenAI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "finalText",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "name": "finalImage",
+              "value": "={{ $('Gerar Imagem (OpenAI)').item.json.data[0].b64_json }}"
+            },
+            {
+              "name": "intervalMinutes",
+              "value": "={{ $('Webhook').item.json.body.intervalMinutes }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set IA Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [800, 150]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "finalText",
+              "value": "={{ $json.body.messageText }}"
+            },
+            {
+              "name": "finalImage",
+              "value": "={{ $json.body.image?.base64 || '' }}"
+            },
+            {
+              "name": "intervalMinutes",
+              "value": "={{ $json.body.intervalMinutes }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Manual Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [800, 450]
+    },
+    {
+      "parameters": {},
+      "name": "Consolidar Dados",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "SUA_PLANILHA_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Página1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://SUA_EVOLUTION_API/message/sendMedia/' + 'NOME_DA_INSTANCIA' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.telefone }}"
+            },
+            {
+              "name": "mediatype",
+              "value": "image"
+            },
+            {
+              "name": "media",
+              "value": "={{ $('Consolidar Dados').item.json.finalImage }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Consolidar Dados').item.json.finalText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Evolution API (Disparo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Consolidar Dados').item.json.intervalMinutes || 10 }}",
+        "unit": "minutes"
+      },
+      "name": "Wait (Aguardar Intervalo)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Usar IA?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Usar IA?": {
+      "main": [
+        [
+          {
+            "node": "Gerar Imagem (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Manual Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Imagem (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Gerar Texto (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Texto (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Set IA Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set IA Data": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Manual Data": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar Dados": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [
+          {
+            "node": "Evolution API (Disparo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution API (Disparo)": {
+      "main": [
+        [
+          {
+            "node": "Wait (Aguardar Intervalo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Aguardar Intervalo)": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
