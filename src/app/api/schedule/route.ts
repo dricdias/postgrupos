@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     // Ler os campos enviados do frontend
     const isAiEnabled = formData.get("isAiEnabled") === "true";
     const intervalMinutes = formData.get("intervalMinutes")?.toString() || "10";
+    const recurringDays = formData.get("recurringDays")?.toString() || "1";
     const aiPrompt = formData.get("aiPrompt")?.toString() || "";
     const messageText = formData.get("messageText")?.toString() || "";
     const image = formData.get("image") as File | null;
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     const n8nPayload = {
       isAiEnabled,
       intervalMinutes: parseInt(intervalMinutes, 10),
+      recurringDays: parseInt(recurringDays, 10),
       aiPrompt,
       messageText,
       image: imageBase64 ? `${imageBase64}` : null

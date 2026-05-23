@@ -10,7 +10,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
@@ -26,7 +29,10 @@
       "name": "Usar IA?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -39,7 +45,10 @@
       "name": "Gerar Imagem (OpenAI)",
       "type": "n8n-nodes-base.openAi",
       "typeVersion": 1,
-      "position": [400, 200],
+      "position": [
+        400,
+        200
+      ],
       "credentials": {
         "openAiApi": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -57,7 +66,10 @@
       "name": "Gerar Texto (OpenAI)",
       "type": "n8n-nodes-base.openAi",
       "typeVersion": 1,
-      "position": [600, 200]
+      "position": [
+        600,
+        200
+      ]
     },
     {
       "parameters": {
@@ -73,7 +85,11 @@
             },
             {
               "name": "intervalMinutes",
-              "value": "={{ $('Webhook').item.json.body.intervalMinutes }}"
+              "value": "={{ $('Webhook').item.json.body.body.intervalMinutes }}"
+            },
+            {
+              "name": "recurringDays",
+              "value": "={{ $('Webhook').item.json.body.body.recurringDays }}"
             }
           ]
         },
@@ -82,7 +98,10 @@
       "name": "Set IA Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
-      "position": [800, 150]
+      "position": [
+        800,
+        150
+      ]
     },
     {
       "parameters": {
@@ -90,15 +109,19 @@
           "string": [
             {
               "name": "finalText",
-              "value": "={{ $json.body.messageText }}"
+              "value": "={{ $json.body.body.messageText }}"
             },
             {
               "name": "finalImage",
-              "value": "={{ $json.body.image?.base64 || '' }}"
+              "value": "={{ $json.body.body.image?.base64 || '' }}"
             },
             {
               "name": "intervalMinutes",
-              "value": "={{ $json.body.intervalMinutes }}"
+              "value": "={{ $json.body.body.intervalMinutes }}"
+            },
+            {
+              "name": "recurringDays",
+              "value": "={{ $json.body.body.recurringDays }}"
             }
           ]
         },
@@ -107,14 +130,20 @@
       "name": "Set Manual Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
-      "position": [800, 450]
+      "position": [
+        800,
+        450
+      ]
     },
     {
       "parameters": {},
       "name": "Consolidar Dados",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1050, 300]
+      "position": [
+        1050,
+        300
+      ]
     },
     {
       "parameters": {
@@ -133,7 +162,10 @@
       "name": "Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [1250, 300]
+      "position": [
+        1600,
+        300
+      ]
     },
     {
       "parameters": {
@@ -143,7 +175,10 @@
       "name": "Loop",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1450, 300]
+      "position": [
+        1800,
+        300
+      ]
     },
     {
       "parameters": {
@@ -177,7 +212,10 @@
       "name": "Evolution API (Disparo)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1650, 300]
+      "position": [
+        2000,
+        300
+      ]
     },
     {
       "parameters": {
@@ -187,7 +225,68 @@
       "name": "Wait (Aguardar Intervalo)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [1850, 300]
+      "position": [
+        2200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const days = $input.first().json.recurringDays || 1;\nconst result = [];\nfor (let i = 0; i < days; i++) {\n  result.push({\n    json: {\n      ...$input.first().json,\n      dayIndex: i + 1\n    }\n  });\n}\nreturn result;"
+      },
+      "name": "Gerar Dias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop Diário",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "days"
+      },
+      "name": "Wait Diário",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $('Loop Diário').item.json.dayIndex }}",
+              "operation": "smaller",
+              "value2": "={{ $('Consolidar Dados').item.json.recurringDays }}"
+            }
+          ]
+        }
+      },
+      "name": "Checar Último Dia",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        500
+      ]
     }
   ],
   "connections": {
@@ -264,17 +363,6 @@
         ]
       ]
     },
-    "Consolidar Dados": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Google Sheets": {
       "main": [
         [
@@ -291,6 +379,13 @@
         [
           {
             "node": "Evolution API (Disparo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Checar Último Dia",
             "type": "main",
             "index": 0
           }
@@ -317,6 +412,63 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Consolidar Dados": {
+      "main": [
+        [
+          {
+            "node": "Gerar Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Dias": {
+      "main": [
+        [
+          {
+            "node": "Loop Diário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Diário": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Wait Diário": {
+      "main": [
+        [
+          {
+            "node": "Loop Diário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar Último Dia": {
+      "main": [
+        [
+          {
+            "node": "Wait Diário",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
