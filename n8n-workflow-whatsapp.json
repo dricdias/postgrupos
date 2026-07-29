@@ -3,52 +3,78 @@
   "nodes": [
     {
       "parameters": {
+        "content": "## Configuração\n\n1. **Webhook**: copie a URL de produção para o `.env` do app (`N8N_WEBHOOK_URL`).\n2. **Google Sheets**: informe o ID da planilha e a aba. A planilha precisa ter uma coluna chamada `telefone` (formato 5511999999999).\n3. **OpenAI**: selecione a credencial `OpenAI account` nos dois nós HTTP.\n4. **Evolution API**: troque `SUA_EVOLUTION_API` e `NOME_DA_INSTANCIA` e configure a credencial de Header Auth (`apikey`).\n\nO disparo acontece uma única vez por contato, respeitando o intervalo em minutos escolhido no app.",
+        "height": 320,
+        "width": 420
+      },
+      "id": "sticky-setup",
+      "name": "Instruções",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-460, 140]
+    },
+    {
+      "parameters": {
         "httpMethod": "POST",
         "path": "disparo-lote-whatsapp",
+        "responseMode": "onReceived",
         "options": {}
       },
+      "id": "node-webhook",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        0,
-        300
-      ]
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "disparo-lote-whatsapp"
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.body.isAiEnabled }}",
-              "value2": true
+              "id": "cond-ia",
+              "leftValue": "={{ $json.body.isAiEnabled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
       },
+      "id": "node-if-ia",
       "name": "Usar IA?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        200,
-        300
-      ]
+      "typeVersion": 2.2,
+      "position": [220, 300]
     },
     {
       "parameters": {
-        "resource": "image",
-        "operation": "generate",
-        "prompt": "={{ $json.body.aiPrompt }}",
-        "size": "1024x1024",
-        "responseFormat": "b64_json"
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-image-1\",\n  \"prompt\": {{ JSON.stringify($json.body.aiPrompt) }},\n  \"n\": 1,\n  \"size\": \"1024x1024\"\n}",
+        "options": {}
       },
+      "id": "node-openai-image",
       "name": "Gerar Imagem (OpenAI)",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1,
-      "position": [
-        400,
-        200
-      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 180],
       "credentials": {
         "openAiApi": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -58,92 +84,122 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "create",
-        "prompt": "Crie uma mensagem persuasiva baseada neste pedido: {{ $('Webhook').item.json.body.aiPrompt }}",
-        "model": "gpt-4o"
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify('Crie uma mensagem curta e persuasiva para WhatsApp, em português do Brasil, com base neste pedido: ' + $('Webhook').first().json.body.aiPrompt) }}\n    }\n  ]\n}",
+        "options": {}
       },
+      "id": "node-openai-text",
       "name": "Gerar Texto (OpenAI)",
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1,
-      "position": [
-        600,
-        200
-      ]
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 180],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
     },
     {
       "parameters": {
-        "values": {
-          "string": [
+        "assignments": {
+          "assignments": [
             {
+              "id": "ia-text",
               "name": "finalText",
-              "value": "={{ $json.text }}"
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string"
             },
             {
+              "id": "ia-image",
               "name": "finalImage",
-              "value": "={{ $('Gerar Imagem (OpenAI)').item.json.data[0].b64_json }}"
+              "value": "={{ $('Gerar Imagem (OpenAI)').first().json.data[0].b64_json }}",
+              "type": "string"
             },
             {
+              "id": "ia-mime",
+              "name": "mimeType",
+              "value": "image/png",
+              "type": "string"
+            },
+            {
+              "id": "ia-filename",
+              "name": "fileName",
+              "value": "imagem.png",
+              "type": "string"
+            },
+            {
+              "id": "ia-interval",
               "name": "intervalMinutes",
-              "value": "={{ $('Webhook').item.json.body.body.intervalMinutes }}"
-            },
-            {
-              "name": "recurringDays",
-              "value": "={{ $('Webhook').item.json.body.body.recurringDays }}"
+              "value": "={{ $('Webhook').first().json.body.intervalMinutes || 10 }}",
+              "type": "number"
             }
           ]
         },
         "options": {}
       },
+      "id": "node-set-ia",
       "name": "Set IA Data",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [
-        800,
-        150
-      ]
+      "typeVersion": 3.4,
+      "position": [900, 180]
     },
     {
       "parameters": {
-        "values": {
-          "string": [
+        "assignments": {
+          "assignments": [
             {
+              "id": "man-text",
               "name": "finalText",
-              "value": "={{ $json.body.body.messageText }}"
+              "value": "={{ $json.body.messageText }}",
+              "type": "string"
             },
             {
+              "id": "man-image",
               "name": "finalImage",
-              "value": "={{ $json.body.body.image?.base64 || '' }}"
+              "value": "={{ $json.body.image || '' }}",
+              "type": "string"
             },
             {
+              "id": "man-mime",
+              "name": "mimeType",
+              "value": "={{ $json.body.mimeType || 'image/jpeg' }}",
+              "type": "string"
+            },
+            {
+              "id": "man-filename",
+              "name": "fileName",
+              "value": "={{ $json.body.fileName || 'imagem.jpg' }}",
+              "type": "string"
+            },
+            {
+              "id": "man-interval",
               "name": "intervalMinutes",
-              "value": "={{ $json.body.body.intervalMinutes }}"
-            },
-            {
-              "name": "recurringDays",
-              "value": "={{ $json.body.body.recurringDays }}"
+              "value": "={{ $json.body.intervalMinutes || 10 }}",
+              "type": "number"
             }
           ]
         },
         "options": {}
       },
+      "id": "node-set-manual",
       "name": "Set Manual Data",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [
-        800,
-        450
-      ]
+      "typeVersion": 3.4,
+      "position": [460, 440]
     },
     {
       "parameters": {},
+      "id": "node-consolidar",
       "name": "Consolidar Dados",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        1050,
-        300
-      ]
+      "position": [1120, 300]
     },
     {
       "parameters": {
@@ -159,134 +215,128 @@
         },
         "options": {}
       },
-      "name": "Google Sheets",
+      "id": "node-sheets",
+      "name": "Google Sheets (Contatos)",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [
-        1600,
-        300
-      ]
+      "typeVersion": 4.5,
+      "position": [1340, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
       "parameters": {
         "batchSize": 1,
         "options": {}
       },
-      "name": "Loop",
+      "id": "node-loop",
+      "name": "Loop Contatos",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [
-        1800,
-        300
-      ]
+      "position": [1560, 300]
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://SUA_EVOLUTION_API/message/sendMedia/' + 'NOME_DA_INSTANCIA' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "number",
-              "value": "={{ $json.telefone }}"
-            },
-            {
-              "name": "mediatype",
-              "value": "image"
-            },
-            {
-              "name": "media",
-              "value": "={{ $('Consolidar Dados').item.json.finalImage }}"
-            },
-            {
-              "name": "caption",
-              "value": "={{ $('Consolidar Dados').item.json.finalText }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "name": "Evolution API (Disparo)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        2000,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "amount": "={{ $('Consolidar Dados').item.json.intervalMinutes || 10 }}",
-        "unit": "minutes"
-      },
-      "name": "Wait (Aguardar Intervalo)",
-      "type": "n8n-nodes-base.wait",
+      "parameters": {},
+      "id": "node-fim",
+      "name": "Fim do Disparo",
+      "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        2200,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const days = $input.first().json.recurringDays || 1;\nconst result = [];\nfor (let i = 0; i < days; i++) {\n  result.push({\n    json: {\n      ...$input.first().json,\n      dayIndex: i + 1\n    }\n  });\n}\nreturn result;"
-      },
-      "name": "Gerar Dias",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1200,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      },
-      "name": "Loop Diário",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        1400,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "amount": 1,
-        "unit": "days"
-      },
-      "name": "Wait Diário",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1,
-      "position": [
-        2050,
-        500
-      ]
+      "position": [1800, 160]
     },
     {
       "parameters": {
         "conditions": {
-          "number": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $('Loop Diário').item.json.dayIndex }}",
-              "operation": "smaller",
-              "value2": "={{ $('Consolidar Dados').item.json.recurringDays }}"
+              "id": "cond-img",
+              "leftValue": "={{ $('Consolidar Dados').first().json.finalImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
       },
-      "name": "Checar Último Dia",
+      "id": "node-if-img",
+      "name": "Tem Imagem?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        1850,
-        500
-      ]
+      "typeVersion": 2.2,
+      "position": [1800, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://SUA_EVOLUTION_API/message/sendMedia/NOME_DA_INSTANCIA",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": {{ JSON.stringify(String($json.telefone)) }},\n  \"mediatype\": \"image\",\n  \"mimetype\": {{ JSON.stringify($('Consolidar Dados').first().json.mimeType) }},\n  \"fileName\": {{ JSON.stringify($('Consolidar Dados').first().json.fileName) }},\n  \"caption\": {{ JSON.stringify($('Consolidar Dados').first().json.finalText) }},\n  \"media\": {{ JSON.stringify($('Consolidar Dados').first().json.finalImage) }}\n}",
+        "options": {}
+      },
+      "id": "node-evo-media",
+      "name": "Evolution API (Mídia)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2040, 360],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Evolution API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://SUA_EVOLUTION_API/message/sendText/NOME_DA_INSTANCIA",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": {{ JSON.stringify(String($json.telefone)) }},\n  \"text\": {{ JSON.stringify($('Consolidar Dados').first().json.finalText) }}\n}",
+        "options": {}
+      },
+      "id": "node-evo-text",
+      "name": "Evolution API (Texto)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2040, 540],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Evolution API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Consolidar Dados').first().json.intervalMinutes || 10 }}",
+        "unit": "minutes"
+      },
+      "id": "node-wait",
+      "name": "Wait (Aguardar Intervalo)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2280, 440],
+      "webhookId": "wait-intervalo-disparo"
     }
   ],
   "connections": {
@@ -363,36 +413,76 @@
         ]
       ]
     },
-    "Google Sheets": {
+    "Consolidar Dados": {
       "main": [
         [
           {
-            "node": "Loop",
+            "node": "Google Sheets (Contatos)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Loop": {
+    "Google Sheets (Contatos)": {
       "main": [
         [
           {
-            "node": "Evolution API (Disparo)",
+            "node": "Loop Contatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Contatos": {
+      "main": [
+        [
+          {
+            "node": "Fim do Disparo",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Checar Último Dia",
+            "node": "Tem Imagem?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Evolution API (Disparo)": {
+    "Tem Imagem?": {
+      "main": [
+        [
+          {
+            "node": "Evolution API (Mídia)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Evolution API (Texto)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution API (Mídia)": {
+      "main": [
+        [
+          {
+            "node": "Wait (Aguardar Intervalo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution API (Texto)": {
       "main": [
         [
           {
@@ -407,72 +497,16 @@
       "main": [
         [
           {
-            "node": "Loop",
+            "node": "Loop Contatos",
             "type": "main",
             "index": 0
           }
         ]
-      ]
-    },
-    "Consolidar Dados": {
-      "main": [
-        [
-          {
-            "node": "Gerar Dias",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gerar Dias": {
-      "main": [
-        [
-          {
-            "node": "Loop Diário",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Loop Diário": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
-      ]
-    },
-    "Wait Diário": {
-      "main": [
-        [
-          {
-            "node": "Loop Diário",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Checar Último Dia": {
-      "main": [
-        [
-          {
-            "node": "Wait Diário",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "pinData": {}
 }

@@ -9,13 +9,12 @@ export default function Home() {
     messageText: "",
     aiPrompt: "",
     intervalMinutes: "10",
-    recurringDays: "1",
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -37,8 +36,7 @@ export default function Home() {
       const payload = new FormData();
       payload.append("isAiEnabled", String(isAiEnabled));
       payload.append("intervalMinutes", formData.intervalMinutes);
-      payload.append("recurringDays", formData.recurringDays);
-      
+
       if (isAiEnabled) {
         payload.append("aiPrompt", formData.aiPrompt);
       } else {
@@ -57,16 +55,21 @@ export default function Home() {
       if (res.ok) {
         alert("Agendamento criado com sucesso!");
         // Reset form
-        setFormData({ messageText: "", aiPrompt: "", intervalMinutes: "10", recurringDays: "1" });
+        setFormData({ messageText: "", aiPrompt: "", intervalMinutes: "10" });
         setImageFile(null);
         setPreviewUrl(null);
         setIsAiEnabled(false);
       } else {
-        alert("Erro ao agendar a mensagem.");
+        const data = await res.json().catch(() => null);
+        alert(`Erro ao agendar a mensagem (HTTP ${res.status}): ${data?.error ?? res.statusText}`);
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao enviar a requisição.");
+      // "Failed to fetch" aqui significa que o servidor não respondeu:
+      // servidor parado ou aba aberta em outra porta.
+      alert(
+        "Não foi possível falar com o servidor. Verifique se o 'npm run dev' está rodando e se a página está aberta na porta correta."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -181,24 +184,6 @@ export default function Home() {
                 onChange={handleInputChange}
                 className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 transition-all"
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-300 ml-1 mt-6">
-                <CalendarClock size={16} className="text-violet-400" /> Repetir todos os dias (mesmo horário)
-              </label>
-              <select
-                name="recurringDays"
-                required
-                value={formData.recurringDays}
-                onChange={handleInputChange}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all"
-              >
-                <option value="1">Não repetir (Enviar apenas hoje)</option>
-                <option value="7">Repetir por 7 dias</option>
-                <option value="15">Repetir por 15 dias</option>
-                <option value="30">Repetir por 30 dias</option>
-              </select>
             </div>
           </div>
 

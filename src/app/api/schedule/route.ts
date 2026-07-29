@@ -7,30 +7,32 @@ export async function POST(req: NextRequest) {
     // Ler os campos enviados do frontend
     const isAiEnabled = formData.get("isAiEnabled") === "true";
     const intervalMinutes = formData.get("intervalMinutes")?.toString() || "10";
-    const recurringDays = formData.get("recurringDays")?.toString() || "1";
     const aiPrompt = formData.get("aiPrompt")?.toString() || "";
     const messageText = formData.get("messageText")?.toString() || "";
     const image = formData.get("image") as File | null;
 
-    let imageBase64 = null;
-    let mimeType = null;
+    let imageBase64: string | null = null;
+    let mimeType: string | null = null;
+    let fileName: string | null = null;
 
     // Converter a imagem para base64 se foi enviada (modo manual)
     if (image && image.size > 0) {
       const arrayBuffer = await image.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       imageBase64 = buffer.toString("base64");
-      mimeType = image.type;
+      mimeType = image.type || "image/jpeg";
+      fileName = image.name || "imagem.jpg";
     }
 
     // Criar o payload JSON estruturado para enviar ao n8n
     const n8nPayload = {
       isAiEnabled,
       intervalMinutes: parseInt(intervalMinutes, 10),
-      recurringDays: parseInt(recurringDays, 10),
       aiPrompt,
       messageText,
-      image: imageBase64 ? `${imageBase64}` : null
+      image: imageBase64 ?? "",
+      mimeType: mimeType ?? "",
+      fileName: fileName ?? ""
     };
 
     const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
@@ -46,11 +48,13 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ body: n8nPayload }), // Enviando dentro de obj 'body' pra manter formato no n8n
+      // O n8n já expõe o corpo da requisição em $json.body — não envolver em outro 'body'
+      body: JSON.stringify(n8nPayload),
     });
 
     if (!response.ok) {
-      throw new Error(`n8n webhook error: ${response.statusText}`);
+      const detail = await response.text().catch(() => "");
+      throw new Error(`n8n webhook error ${response.status}: ${detail || response.statusText}`);
     }
 
     return NextResponse.json({ success: true });
